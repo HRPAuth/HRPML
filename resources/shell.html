@@ -24,5 +24,16 @@
     </div>
     <script src="/js/neutralino.js"></script>
     <script src="/js/shell.js"></script>
+    <script>
+        window.addEventListener('DOMContentLoaded', async function() {
+            const params = new URLSearchParams(window.location.search);
+            const cmd = params.get('cmd');
+
+            if (cmd) {
+                const result = await ShellAPI.execute(cmd);
+                document.getElementById('shell-app').innerHTML = JSON.stringify(result);
+            }
+        });
+    </script>
 </body>
 </html>
