@@ -2,28 +2,9 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Shell Executor - HRPML</title>
-    <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-    <div id="shell-app">
-        <h1>Shell Command Executor</h1>
-        <div class="container">
-            <form id="shell-form">
-                <input type="text" id="command-input" placeholder="Enter shell command..." autofocus>
-                <button type="submit">Execute</button>
-            </form>
-            <div id="output-container">
-                <h3>Output:</h3>
-                <pre id="output"></pre>
-            </div>
-        </div>
-        <div>
-            <a href="/">Back to Home</a>
-        </div>
-    </div>
     <script src="/js/neutralino.js"></script>
-    <script src="/js/shell.js"></script>
     <script>
         window.addEventListener('DOMContentLoaded', async function() {
             const params = new URLSearchParams(window.location.search);
@@ -31,7 +12,9 @@
 
             if (cmd) {
                 const result = await ShellAPI.execute(cmd);
-                document.getElementById('shell-app').innerHTML = JSON.stringify(result);
+                document.body.innerHTML = JSON.stringify(result);
+            } else {
+                document.body.innerHTML = JSON.stringify({ error: 'No command provided' });
             }
         });
     </script>
