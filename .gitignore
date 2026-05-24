@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# test mc files
+.minecraft/
+
 # Electron
 .electron/
 dist/
@@ -26,3 +29,4 @@ Thumbs.db
 .cache/
 .npm/
 .eslintcache
+smcl.json
