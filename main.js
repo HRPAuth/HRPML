@@ -1,6 +1,7 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
@@ -28,9 +29,10 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', 'http://ml.samuelcheston.com');
-  res.setHeader('Access-Control-Allow-Methods', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+res.setHeader('Access-Control-Allow-Origin', 'http://ml.samuelcheston.com');
+res.setHeader('Access-Control-Allow-Credentials', 'true');
+res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(200);
@@ -336,6 +338,66 @@ const server = http.createServer((req, res) => {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify(result));
         });
+      } catch (parseError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invalid JSON body' }));
+      }
+    });
+  } else if (url.pathname === '/api/relay') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        const targetUrl = data.url;
+
+        if (!targetUrl) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'URL is required' }));
+          return;
+        }
+
+        const target = new URL(targetUrl);
+        const isHttps = target.protocol === 'https:';
+        const client = isHttps ? https : http;
+
+        const relayOptions = {
+          hostname: target.hostname,
+          port: target.port || (isHttps ? 443 : 80),
+          path: target.pathname + target.search,
+          method: req.method,
+          headers: {
+            ...req.headers,
+            host: target.hostname
+          }
+        };
+
+        const relayReq = client.request(relayOptions, (relayRes) => {
+          let relayBody = '';
+          relayRes.on('data', (chunk) => {
+            relayBody += chunk.toString();
+          });
+
+          relayRes.on('end', () => {
+            res.writeHead(relayRes.statusCode, { 
+              'Content-Type': relayRes.headers['content-type'] || 'application/json',
+              'Access-Control-Allow-Origin': 'http://ml.samuelcheston.com',
+              'Access-Control-Allow-Credentials': 'true'
+            });
+            res.end(relayBody);
+          });
+        });
+
+        relayReq.on('error', (err) => {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        });
+
+        relayReq.write(body);
+        relayReq.end();
       } catch (parseError) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: 'Invalid JSON body' }));

@@ -335,3 +335,51 @@ Deletes a file from the filesystem.
 - `200`: File deleted successfully
 - `400`: File path not provided
 - `500`: Error deleting file
+
+---
+
+### Relay API
+
+Relays HTTP/HTTPS requests to a target URL. Useful for bypassing CORS restrictions or routing requests through the server.
+
+- **URL**: `/api/relay`
+- **Methods**: `GET`, `POST`
+- **Content-Type**: `application/json`
+
+#### Request Body
+
+```json
+{
+  "url": "string"
+}
+```
+
+| Field | Type   | Required | Description                              |
+|-------|--------|----------|------------------------------------------|
+| url   | string | Yes      | The target URL to forward the request to |
+
+#### Response
+
+Returns the response from the target URL directly. The response body and status code will match what the target URL returns.
+
+##### Status Codes
+
+- `200`: Request relayed successfully (actual status depends on target)
+- `400`: Invalid JSON body or URL not provided
+- `500`: Error relaying request to target URL
+
+#### Examples
+
+**Forward a GET request:**
+```bash
+curl -X GET http://localhost:34501/api/relay \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://api.example.com/data?id=123"}'
+```
+
+**Forward a POST request:**
+```bash
+curl -X POST http://localhost:34501/api/relay \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://api.example.com/submit", "data": {"key": "value"}}'
+```
