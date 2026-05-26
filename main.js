@@ -28,8 +28,8 @@ const MIME_TYPES = {
 };
 
 const server = http.createServer((req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Origin', 'http://ml.samuelcheston.com');
+  res.setHeader('Access-Control-Allow-Methods', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') {
@@ -40,7 +40,265 @@ const server = http.createServer((req, res) => {
 
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  if (url.pathname === '/api/execute' && req.method === 'POST') {
+  if (url.pathname === '/api/jfs/' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        const filePath = data.file;
+
+        if (!filePath) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'File path is required' }));
+          return;
+        }
+
+        const content = data.content !== undefined ? data.content : data;
+        const jsonContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+
+        fs.writeFile(filePath, jsonContent, 'utf8', (err) => {
+          if (err) {
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: 'File written successfully', path: filePath }));
+        });
+      } catch (parseError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invalid JSON body' }));
+      }
+    });
+  } else if (url.pathname === '/api/jfs/' && req.method === 'GET') {
+    const filePath = url.searchParams.get('file');
+
+    if (!filePath) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'File path is required' }));
+      return;
+    }
+
+    fs.readFile(filePath, 'utf8', (err, data) => {
+      if (err) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+        return;
+      }
+
+      try {
+        const jsonData = JSON.parse(data);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, data: jsonData, path: filePath }));
+      } catch (parseError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invalid JSON in file' }));
+      }
+    });
+  } else if (url.pathname === '/api/jfs/' && req.method === 'DELETE') {
+    const filePath = url.searchParams.get('file');
+
+    if (!filePath) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'File path is required' }));
+      return;
+    }
+
+    fs.unlink(filePath, (err) => {
+      if (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'File deleted successfully', path: filePath }));
+    });
+  } else if (url.pathname === '/api/jfs/' && req.method === 'PATCH') {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        const filePath = data.file;
+        const modifications = data.modify;
+
+        if (!filePath) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'File path is required' }));
+          return;
+        }
+
+        if (!modifications || typeof modifications !== 'object') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Modify object is required' }));
+          return;
+        }
+
+        fs.readFile(filePath, 'utf8', (err, fileData) => {
+          if (err) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: err.message }));
+            return;
+          }
+
+          try {
+            const jsonData = JSON.parse(fileData);
+            const updatedData = { ...jsonData, ...modifications };
+
+            fs.writeFile(filePath, JSON.stringify(updatedData, null, 2), 'utf8', (writeErr) => {
+              if (writeErr) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: writeErr.message }));
+                return;
+              }
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true, message: 'File modified successfully', path: filePath, data: updatedData }));
+            });
+          } catch (parseError) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Invalid JSON in file' }));
+          }
+        });
+      } catch (parseError) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invalid JSON body' }));
+      }
+    });
+  } else if (url.pathname.startsWith('/api/fs/')) {
+    const fsPath = url.pathname.slice('/api/fs/'.length);
+    
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          const filePath = data.path || fsPath;
+          const content = data.content || '';
+          const action = data.action || 'create';
+
+          if (!filePath) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'File path is required' }));
+            return;
+          }
+
+          if (action === 'create') {
+            fs.writeFile(filePath, content, 'utf8', (err) => {
+              if (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+                return;
+              }
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true, message: 'File created successfully', path: filePath }));
+            });
+          } else if (action === 'content-add') {
+            fs.appendFile(filePath, content, 'utf8', (err) => {
+              if (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+                return;
+              }
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true, message: 'Content added successfully', path: filePath }));
+            });
+          } else if (action === 'content-replace') {
+            const search = data.search;
+            const replaceWith = data.replaceWith;
+            
+            if (search === undefined) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: 'Search string is required for replace' }));
+              return;
+            }
+
+            fs.readFile(filePath, 'utf8', (readErr, fileData) => {
+              if (readErr) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: readErr.message }));
+                return;
+              }
+              const updatedContent = fileData.replace(new RegExp(search, 'g'), replaceWith || '');
+              fs.writeFile(filePath, updatedContent, 'utf8', (writeErr) => {
+                if (writeErr) {
+                  res.writeHead(500, { 'Content-Type': 'application/json' });
+                  res.end(JSON.stringify({ success: false, error: writeErr.message }));
+                  return;
+                }
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, message: 'Content replaced successfully', path: filePath }));
+              });
+            });
+          } else if (action === 'content-rewrite') {
+            fs.writeFile(filePath, content, 'utf8', (err) => {
+              if (err) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: err.message }));
+                return;
+              }
+              res.writeHead(200, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: true, message: 'Content rewritten successfully', path: filePath }));
+            });
+          } else {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Invalid action. Use: create, content-add, content-replace, content-rewrite' }));
+          }
+        } catch (parseError) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Invalid JSON body' }));
+        }
+      });
+    } else if (req.method === 'GET') {
+      const filePath = url.searchParams.get('path') || fsPath;
+
+      if (!filePath) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'File path is required' }));
+        return;
+      }
+
+      fs.readFile(filePath, 'utf8', (err, data) => {
+        if (err) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, content: data, path: filePath }));
+      });
+    } else if (req.method === 'DELETE') {
+      const filePath = url.searchParams.get('path') || fsPath;
+
+      if (!filePath) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'File path is required' }));
+        return;
+      }
+
+      fs.unlink(filePath, (err) => {
+        if (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'File deleted successfully', path: filePath }));
+      });
+    } else {
+      res.writeHead(405, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Method not allowed' }));
+    }
+  } else if (url.pathname === '/api/execute' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => {
       body += chunk.toString();
@@ -118,135 +376,6 @@ const server = http.createServer((req, res) => {
       }
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(data);
-    });
-  } else if (url.pathname === '/api/smcl') {
-    const smclPath = path.join(__dirname, 'smcl.json');
-    if (req.method === 'GET') {
-      fs.access(smclPath, fs.constants.F_OK, (err) => {
-        if (err) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ exists: false }));
-        } else {
-          fs.readFile(smclPath, 'utf8', (err, data) => {
-            if (err) {
-              res.writeHead(500, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Failed to read file' }));
-            } else {
-              res.writeHead(200, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ exists: true, content: JSON.parse(data) }));
-            }
-          });
-        }
-      });
-    } else if (req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => {
-        body += chunk.toString();
-      });
-      req.on('end', () => {
-        try {
-          const data = JSON.parse(body);
-          fs.writeFile(smclPath, JSON.stringify(data, null, 2), 'utf8', (err) => {
-            if (err) {
-              res.writeHead(500, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ error: 'Failed to write file' }));
-            } else {
-              res.writeHead(200, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ success: true }));
-            }
-          });
-        } catch (parseError) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Invalid JSON body' }));
-        }
-      });
-    } else {
-      res.writeHead(405, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Method not allowed' }));
-    }
-  } else if (url.pathname === '/api/files' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => {
-      body += chunk.toString();
-    });
-    req.on('end', () => {
-      try {
-        const data = JSON.parse(body);
-        const operation = data.operation;
-        const filePath = data.path;
-        
-        if (!operation || !filePath) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          return res.end(JSON.stringify({ success: false, error: 'Missing required fields: operation and path' }));
-        }
-
-        switch (operation) {
-          case 'read':
-            fs.readFile(filePath, 'utf8', (err, content) => {
-              if (err) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: false, error: err.message }));
-              } else {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: true, content }));
-              }
-            });
-            break;
-          case 'create':
-          case 'modify':
-          case 'write':
-            const fileContent = data.content || '';
-            fs.writeFile(filePath, fileContent, 'utf8', (err) => {
-              if (err) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: false, error: err.message }));
-              } else {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: true }));
-              }
-            });
-            break;
-          case 'delete':
-            fs.unlink(filePath, (err) => {
-              if (err) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: false, error: err.message }));
-              } else {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: true }));
-              }
-            });
-            break;
-          case 'exists':
-            fs.access(filePath, fs.constants.F_OK, (err) => {
-              res.writeHead(200, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ success: true, exists: !err }));
-            });
-            break;
-          case 'list':
-            fs.readdir(filePath, { withFileTypes: true }, (err, files) => {
-              if (err) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: false, error: err.message }));
-              } else {
-                const fileList = files.map(file => ({
-                  name: file.name,
-                  isDirectory: file.isDirectory(),
-                  isFile: file.isFile()
-                }));
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ success: true, files: fileList }));
-              }
-            });
-            break;
-          default:
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Invalid operation. Supported operations: read, write, create, modify, delete, exists, list' }));
-        }
-      } catch (parseError) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Invalid JSON body' }));
-      }
     });
   } else {
     res.writeHead(404, { 'Content-Type': 'application/json' });
