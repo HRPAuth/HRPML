@@ -1,0 +1,1 @@
+If there are any api endpoint be changed, the api doc files should also be modified.
